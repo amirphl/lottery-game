@@ -79,7 +79,6 @@ func main() {
 
 	if mod == "producer" {
 		runProducer()
-
 	} else if mod == "consumer" {
 		runConsumer()
 	} else {
