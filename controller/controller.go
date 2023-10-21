@@ -11,6 +11,7 @@ import (
 
 	"github.com/amirphl/lottery-game/dto"
 	"github.com/amirphl/lottery-game/item"
+	"github.com/amirphl/lottery-game/service"
 	"github.com/amirphl/lottery-game/util"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
@@ -45,8 +46,14 @@ func (h *LotteryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO auth
+	if !service.Authenticate(h.rdb, user) {
+		http.Error(w, "", http.StatusUnauthorized)
+
+		return
+	}
+
 	exp := h.rdb.ComputeExp(h.windowLengthInMinutes)
+
 	if err := h.rdb.AtomicInc(user.UUID, exp, h.maxReqPerWindow); err != nil {
 		if err.Error() == util.MaxTriesExceeded {
 			http.Error(w, util.MaxTriesExceeded, http.StatusTooManyRequests)
@@ -89,7 +96,12 @@ func (h *PrizeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	page := h.extractPage(params)
 
-	// TODO auth
+	if !service.Authenticate(h.rdb, user) {
+		http.Error(w, "", http.StatusUnauthorized)
+
+		return
+	}
+
 	strs, err := h.rdb.RangePrizes(user, page)
 	if err != nil {
 		log.Printf("Error while reading redis: %s\n", err.Error())
