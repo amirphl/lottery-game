@@ -19,6 +19,9 @@ Implementation criteria:
 ## To run
 - `docker build . -t lotterygame`
 - `docker compose up -d`
+- Create users:
+    - `docker exec -it redis sh -c "redis-cli SADD lottery-users 53800cbd-a509-4091-9122-32f1e5c0ac88  133a0124-e129-4ed4-91dc-8d671cb2291c  246a1e22-b851-4cbf-90f2-04f71e69b2c6"`
+    - Add as many as number of users by appending uuid to end of the command.
 - To submit a request for user `53800cbd-a509-4091-9122-32f1e5c0ac88`:
     - `curl localhost:8080/api/v1/lottery -X POST -d '{"user_id":"53800cbd-a509-4091-9122-32f1e5c0ac88"}' -v`
 - To receive the list of prizes:
@@ -47,7 +50,6 @@ Implementation criteria:
 
 ## TODO
 - setup Nginx + load balancing
-- perform authentication on endpoints
 - write unit tests
 - TODOs in the codebase
 - remove .properties files and read from env

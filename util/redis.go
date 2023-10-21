@@ -87,16 +87,22 @@ func (rdb *RedisInstance) RangePrizes(user dto.User, page int64) ([]string, erro
 	return rdb.c.LRange(rdb.ctx, key, start, end).Result()
 }
 
+func (rdb *RedisInstance) Exists(key string, val interface{}) (bool, error) {
+	return rdb.c.SIsMember(rdb.ctx, key, val).Result()
+}
+
 func buildPrizeKey(user dto.User) string {
 	return fmt.Sprintf("%s-%s", user.UUID, LotteryPrizeSuffix)
 }
 
 func NewRedisInstance() *RedisInstance {
-	c := redis.NewClient(&redis.Options{
-		Addr:     "redis:6379", // TODO read from env
-		Password: "",           // no password set
-		DB:       0,            // use default DB
-	})
+	c := redis.NewClient(
+		&redis.Options{
+			Addr:     "redis:6379", // TODO read from env
+			Password: "",           // no password set
+			DB:       0,            // use default DB
+		},
+	)
 
 	ctx := context.Background()
 	if _, err := c.Ping(ctx).Result(); err != nil {
