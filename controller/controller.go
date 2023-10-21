@@ -16,15 +16,15 @@ import (
 )
 
 type LotteryHandler struct {
-	CTX              context.Context
-	RDB              *util.RedisInstance
-	KAF              *util.KafkaProducerInstance
-	MaxReqsPerWindow int64
+	ctx              context.Context
+	rdb              *util.RedisInstance
+	kaf              *util.KafkaProducerInstance
+	maxReqsPerWindow int64
 }
 
 type PrizeHandler struct {
-	CTX context.Context
-	RDB *util.RedisInstance
+	ctx context.Context
+	rdb *util.RedisInstance
 }
 
 func (h *LotteryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -44,7 +44,7 @@ func (h *LotteryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// TODO auth
 	// TODO transaction
-	val, err := h.RDB.GetNumTries(user)
+	val, err := h.rdb.GetNumTries(user)
 	if err != nil {
 		log.Printf("Error while reading redis: %s\n", err.Error())
 		http.Error(w, "", http.StatusInternalServerError)
@@ -53,24 +53,24 @@ func (h *LotteryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	numTries, _ := strconv.ParseInt(val, 10, 64)
-	if h.MaxReqsPerWindow <= numTries {
+	if h.maxReqsPerWindow <= numTries {
 		http.Error(w, "Max tries exceeded", http.StatusTooManyRequests)
 
 		return
 	}
 
-	exp := h.RDB.ComputeNextExp()
-	if err := h.RDB.SetNumTries(user, numTries+1, exp); err != nil {
+	exp := h.rdb.ComputeNextExp()
+	if err := h.rdb.SetNumTries(user, numTries+1, exp); err != nil {
 		log.Printf("Error while writing redis: %s\n", err.Error())
 		http.Error(w, "", http.StatusInternalServerError)
 
 		return
 	}
 
-	resCH := make(chan kafka.Event)
-	defer close(resCH)
-	h.KAF.Produce(user, resCH)
-	e := <-resCH // TODO exit after some seconds
+	resChan := make(chan kafka.Event)
+	defer close(resChan)
+	h.kaf.Produce(user, resChan)
+	e := <-resChan // TODO exit after some seconds
 	switch ev := e.(type) {
 	case *kafka.Message:
 		if ev.TopicPartition.Error != nil {
@@ -99,7 +99,7 @@ func (h *PrizeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page := h.extractPage(params)
 
 	// TODO auth
-	strs, err := h.RDB.RangePrizes(user, page)
+	strs, err := h.rdb.RangePrizes(user, page)
 	if err != nil {
 		log.Printf("Error while reading redis: %s\n", err.Error())
 		http.Error(w, "", http.StatusInternalServerError)
@@ -144,4 +144,28 @@ func (h *PrizeHandler) extractPage(params url.Values) int64 {
 	}
 
 	return 0
+}
+
+func NewLotteryHandler(
+	rdb *util.RedisInstance,
+	kaf *util.KafkaProducerInstance,
+	maxReqPerWindow int64,
+) *LotteryHandler {
+
+	return &LotteryHandler{
+		ctx:              context.Background(),
+		rdb:              rdb,
+		kaf:              kaf,
+		maxReqsPerWindow: maxReqPerWindow,
+	}
+}
+
+func NewPrizeHandler(
+	rdb *util.RedisInstance,
+) *PrizeHandler {
+
+	return &PrizeHandler{
+		ctx: context.Background(),
+		rdb: rdb,
+	}
 }

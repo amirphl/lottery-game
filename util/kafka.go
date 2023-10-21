@@ -16,24 +16,24 @@ import (
 var Topic string = "lottery"
 
 type KafkaProducerInstance struct {
-	CTX context.Context
-	P   *kafka.Producer
+	ctx context.Context
+	p   *kafka.Producer
 	_   struct{}
 }
 
 type KafkaConsumerInstance struct {
-	CTX   context.Context
-	C     *kafka.Consumer
-	SIGCH chan<- os.Signal
-	RESCH <-chan *kafka.Message
-	_     struct{}
+	ctx     context.Context
+	C       *kafka.Consumer
+	SigChan chan<- os.Signal
+	ResChan <-chan *kafka.Message
+	_       struct{}
 }
 
-func (kaf *KafkaProducerInstance) Produce(user dto.User, resCH chan kafka.Event) {
+func (kaf *KafkaProducerInstance) Produce(user dto.User, resChan chan kafka.Event) {
 	key := []byte(user.UUID)
 	val := key
 
-	kaf.P.Produce(
+	kaf.p.Produce(
 		&kafka.Message{
 			TopicPartition: kafka.TopicPartition{
 				Topic:     &Topic,
@@ -42,7 +42,7 @@ func (kaf *KafkaProducerInstance) Produce(user dto.User, resCH chan kafka.Event)
 			Key:   key,
 			Value: val,
 		},
-		resCH,
+		resChan,
 	)
 }
 
@@ -100,8 +100,8 @@ func NewKafkaProducerInstance(conf kafka.ConfigMap) *KafkaProducerInstance {
 	}()
 
 	return &KafkaProducerInstance{
-		CTX: context.Background(),
-		P:   p,
+		ctx: context.Background(),
+		p:   p,
 	}
 }
 
@@ -115,22 +115,22 @@ func NewkafkaConsumerInstance(conf kafka.ConfigMap) *KafkaConsumerInstance {
 
 	err = c.SubscribeTopics([]string{Topic}, nil)
 	// Set up a channel for handling Ctrl-C, etc
-	sigCH := make(chan os.Signal, 1)
-	signal.Notify(sigCH, syscall.SIGINT, syscall.SIGTERM)
-	resCH := make(chan *kafka.Message)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	resChan := make(chan *kafka.Message)
 
 	kaf := &KafkaConsumerInstance{
-		CTX:   context.Background(),
-		C:     c,
-		SIGCH: sigCH,
-		RESCH: resCH,
+		ctx:     context.Background(),
+		C:       c,
+		SigChan: sigChan,
+		ResChan: resChan,
 	}
 
 	go func() {
 		run := true
 		for run {
 			select {
-			case sig := <-sigCH:
+			case sig := <-sigChan:
 				log.Printf("Caught signal %v: terminating\n", sig)
 				run = false
 			default:
@@ -141,10 +141,10 @@ func NewkafkaConsumerInstance(conf kafka.ConfigMap) *KafkaConsumerInstance {
 				}
 				log.Printf("Consumed event from topic %s: key = %-10s value = %s time = %v\n",
 					*ev.TopicPartition.Topic, string(ev.Key), string(ev.Value), ev.Timestamp)
-				resCH <- ev
+				resChan <- ev
 			}
 		}
-		close(resCH)
+		close(resChan)
 	}()
 
 	return kaf
