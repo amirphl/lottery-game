@@ -16,15 +16,18 @@ import (
 )
 
 type LotteryHandler struct {
-	ctx              context.Context
-	rdb              *util.RedisInstance
-	kaf              *util.KafkaProducerInstance
-	maxReqsPerWindow int64
+	ctx                   context.Context
+	rdb                   *util.RedisInstance
+	kaf                   *util.KafkaProducerInstance
+	maxReqPerWindow       int64
+	windowLengthInMinutes int64
+	_                     struct{}
 }
 
 type PrizeHandler struct {
 	ctx context.Context
 	rdb *util.RedisInstance
+	_   struct{}
 }
 
 func (h *LotteryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -43,26 +46,14 @@ func (h *LotteryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO auth
-	// TODO transaction
-	val, err := h.rdb.GetNumTries(user)
-	if err != nil {
-		log.Printf("Error while reading redis: %s\n", err.Error())
-		http.Error(w, "", http.StatusInternalServerError)
-
-		return
-	}
-
-	numTries, _ := strconv.ParseInt(val, 10, 64)
-	if h.maxReqsPerWindow <= numTries {
-		http.Error(w, "Max tries exceeded", http.StatusTooManyRequests)
-
-		return
-	}
-
-	exp := h.rdb.ComputeNextExp()
-	if err := h.rdb.SetNumTries(user, numTries+1, exp); err != nil {
-		log.Printf("Error while writing redis: %s\n", err.Error())
-		http.Error(w, "", http.StatusInternalServerError)
+	exp := h.rdb.ComputeExp(h.windowLengthInMinutes)
+	if err := h.rdb.AtomicInc(user.UUID, exp, h.maxReqPerWindow); err != nil {
+		if err.Error() == util.MaxTriesExceeded {
+			http.Error(w, util.MaxTriesExceeded, http.StatusTooManyRequests)
+		} else {
+			log.Printf("Error while incrementing redis key: %s\n", err.Error())
+			http.Error(w, "", http.StatusInternalServerError)
+		}
 
 		return
 	}
@@ -150,13 +141,15 @@ func NewLotteryHandler(
 	rdb *util.RedisInstance,
 	kaf *util.KafkaProducerInstance,
 	maxReqPerWindow int64,
+	windowLengthInMinutes int64,
 ) *LotteryHandler {
 
 	return &LotteryHandler{
-		ctx:              context.Background(),
-		rdb:              rdb,
-		kaf:              kaf,
-		maxReqsPerWindow: maxReqPerWindow,
+		ctx:                   context.Background(),
+		rdb:                   rdb,
+		kaf:                   kaf,
+		maxReqPerWindow:       maxReqPerWindow,
+		windowLengthInMinutes: windowLengthInMinutes,
 	}
 }
 

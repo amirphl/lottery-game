@@ -47,10 +47,8 @@ Implementation criteria:
 
 ## TODO
 - setup Nginx + load balancing
-- use transactions for limiting request rate using redis
 - perform authentication on endpoints
 - write unit tests
 - TODOs in the codebase
-- improve env var handling
 - remove .properties files and read from env
 - graceful stopping consumers

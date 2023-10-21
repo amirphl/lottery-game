@@ -2,11 +2,11 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/amirphl/lottery-game/dto"
@@ -14,41 +14,57 @@ import (
 )
 
 const (
-	LotteryPrizeSuffix        = "prize"
-	NumPrizePerPage           = 3
-	WindowLengthInMinutesName = "WINDOW_LENGTH_IN_MINUTES"
+	LotteryPrizeSuffix = "prize"
+	NumPrizePerPage    = 3
+	MaxTriesExceeded   = "Max tries exceeded"
 )
 
 type RedisInstance struct {
-	ctx                   context.Context
-	c                     *redis.Client
-	windowLengthInMinutes int
-	_                     struct{}
+	ctx context.Context
+	c   *redis.Client
+	_   struct{}
 }
 
-func (rdb *RedisInstance) GetNumTries(user dto.User) (string, error) {
-	val, err := rdb.c.Get(rdb.ctx, user.UUID).Result()
+// TODO What happens in the case of running the function twice with the same key and the same redis client?
+func (rdb *RedisInstance) AtomicInc(
+	key string,
+	exp time.Duration,
+	maxReqPerWindow int64,
+) error {
+	txf := func(tx *redis.Tx) error {
+		val, err := tx.Get(rdb.ctx, key).Int64()
+		if err != nil && err != redis.Nil {
 
-	if err == redis.Nil {
-		val = "0"
-		err = nil
+			return err
+		}
+
+		if maxReqPerWindow <= val {
+
+			return errors.New(MaxTriesExceeded)
+		}
+
+		val++
+
+		// runs only if the watched keys remain unchanged
+		_, err = tx.TxPipelined(rdb.ctx, func(pipe redis.Pipeliner) error {
+			// pipe handles the error case
+			pipe.Set(rdb.ctx, key, val, exp)
+
+			return nil
+		})
+
+		return err
 	}
 
-	return val, err
+	return rdb.c.Watch(rdb.ctx, txf, key)
 }
 
-func (rdb *RedisInstance) SetNumTries(user dto.User, numTries int64, exp time.Duration) error {
-	val := strconv.FormatInt(numTries, 10)
-
-	return rdb.c.Set(rdb.ctx, user.UUID, val, exp).Err()
-}
-
-func (rdb *RedisInstance) ComputeNextExp() time.Duration {
+func (rdb *RedisInstance) ComputeExp(windowLengthInMinutes int64) time.Duration {
 	t1 := time.Now().UTC()
 	t2 := time.Now().UTC()
 	m := t1.Minute()
-	i := int(math.Floor(float64(m)/float64(rdb.windowLengthInMinutes))) + 1
-	m = i*rdb.windowLengthInMinutes - m
+	i := int(math.Floor(float64(m)/float64(windowLengthInMinutes))) + 1
+	m = i*int(windowLengthInMinutes) - m
 	t1 = t1.Add(time.Duration(m) * time.Minute).Truncate(time.Minute)
 	t1 = t1.Add(1 * time.Millisecond) // to prevent zero value for exp
 	exp := t1.Sub(t2)
@@ -76,18 +92,6 @@ func buildPrizeKey(user dto.User) string {
 }
 
 func NewRedisInstance() *RedisInstance {
-	val := os.Getenv(WindowLengthInMinutesName)
-	if val == "" {
-		log.Printf("Failed to read env var %s", WindowLengthInMinutesName)
-		os.Exit(1)
-	}
-
-	windowLengthInMinutes, err := strconv.ParseInt(val, 10, 32)
-	if err != nil {
-		log.Printf("Failed to read env var %s: %s", WindowLengthInMinutesName, val)
-		os.Exit(1)
-	}
-
 	c := redis.NewClient(&redis.Options{
 		Addr:     "redis:6379", // TODO read from env
 		Password: "",           // no password set
@@ -101,8 +105,7 @@ func NewRedisInstance() *RedisInstance {
 	}
 
 	return &RedisInstance{
-		ctx:                   ctx,
-		c:                     c,
-		windowLengthInMinutes: int(windowLengthInMinutes),
+		ctx: ctx,
+		c:   c,
 	}
 }

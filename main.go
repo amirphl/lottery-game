@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -14,22 +15,39 @@ import (
 )
 
 const (
-	ProducerConfPath    = "./producer.properties"
-	ConsumerConfPath    = "./consumer.properties"
-	MaxReqPerWindowName = "MAX_REQ_PER_WINDOW"
-	NumConsumers        = 4
+	ProducerConfPath          = "./producer.properties"
+	ConsumerConfPath          = "./consumer.properties"
+	MaxReqPerWindowName       = "MAX_REQ_PER_WINDOW"
+	WindowLengthInMinutesName = "WINDOW_LENGTH_IN_MINUTES"
+	NumConsumers              = 4
 )
 
-func runProducer() {
-	val := os.Getenv(MaxReqPerWindowName)
+func readEnv(key string) (int64, error) {
+	val := os.Getenv(key)
 	if val == "" {
-		log.Printf("Failed to read env var %s", MaxReqPerWindowName)
+
+		return 0, fmt.Errorf("Failed to read env var %s", key)
+	}
+
+	res, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+
+		return 0, fmt.Errorf("Failed to read env var %s: %s", key, val)
+	}
+
+	return res, nil
+}
+
+func runProducer() {
+	maxReqPerWindow, err := readEnv(MaxReqPerWindowName)
+	if err != nil {
+		log.Println(err.Error())
 		os.Exit(1)
 	}
 
-	maxReqPerWindow, err := strconv.ParseInt(val, 10, 64)
+	windowLengthInMinutes, err := readEnv(WindowLengthInMinutesName)
 	if err != nil {
-		log.Printf("Failed to read env var %s: %s", MaxReqPerWindowName, val)
+		log.Println(err.Error())
 		os.Exit(1)
 	}
 
@@ -38,7 +56,7 @@ func runProducer() {
 	kaf := util.NewKafkaProducerInstance(conf)
 	r := mux.NewRouter()
 
-	lotteryHandler := controller.NewLotteryHandler(rdb, kaf, maxReqPerWindow)
+	lotteryHandler := controller.NewLotteryHandler(rdb, kaf, maxReqPerWindow, windowLengthInMinutes)
 	prizeHandler := controller.NewPrizeHandler(rdb)
 
 	// TODO CORS Token
