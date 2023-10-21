@@ -51,7 +51,7 @@ func HeavyProcess(
 	rdb *util.RedisInstance,
 	wg *sync.WaitGroup,
 ) {
-	for ev := range kaf.RESCH {
+	for ev := range kaf.ResChan {
 		user := dto.User{
 			UUID: string(ev.Key),
 		}
