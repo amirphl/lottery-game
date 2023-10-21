@@ -33,13 +33,16 @@ Implementation criteria:
 ## Considerations
 - Kafka
     - Use a kafka cluster for high availability and increasing performace.
-    - Employ sharding technique.
+    - Employ sharding technique. For example, we can use user id (uuid) for generating different hashes. Number of partitions are also an important factor.
     - ack = 0 | 1 | all? This affects both the performance and the integrity of the code.
     - When should the consumers commit?
     - Use consumer groups for high availability of the consumers.
+    - Service discovery and service registry are needed to find out which producers and consumers are alive.
 - Redis
     - A cluster of redis instances
     - Persist data to prevent data loss.
+- Number of Producers and Consumers
+    - We can add as many as producers as we want. We just need to add them to Nginx to perform load balancing. This also holds for the consumers.
 
 
 ## TODO

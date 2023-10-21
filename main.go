@@ -39,16 +39,9 @@ func runProducer() {
 	kaf := util.NewKafkaProducerInstance(conf)
 	r := mux.NewRouter()
 
-	lotteryHandler := &controller.LotteryHandler{
-		CTX:              context.Background(),
-		RDB:              rdb,
-		KAF:              kaf,
-		MaxReqsPerWindow: maxReqPerWindow,
-	}
-	prizeHandler := &controller.PrizeHandler{
-		CTX: context.Background(),
-		RDB: rdb,
-	}
+	lotteryHandler := controller.NewLotteryHandler(rdb, kaf, maxReqPerWindow)
+	prizeHandler := controller.NewPrizeHandler(rdb)
+
 	// TODO CORS Token
 	// TODO group APIs
 	r.Handle("/api/v1/lottery", lotteryHandler).Methods("POST")
@@ -71,7 +64,7 @@ func runConsumer() {
 
 	wg.Wait()
 	kaf.C.Close()
-	close(kaf.SIGCH)
+	close(kaf.SigChan)
 }
 
 func main() {

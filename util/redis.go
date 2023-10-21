@@ -20,14 +20,14 @@ const (
 )
 
 type RedisInstance struct {
-	CTX                   context.Context
-	C                     *redis.Client
-	WindowLengthInMinutes int
+	ctx                   context.Context
+	c                     *redis.Client
+	windowLengthInMinutes int
 	_                     struct{}
 }
 
 func (rdb *RedisInstance) GetNumTries(user dto.User) (string, error) {
-	val, err := rdb.C.Get(rdb.CTX, user.UUID).Result()
+	val, err := rdb.c.Get(rdb.ctx, user.UUID).Result()
 
 	if err == redis.Nil {
 		val = "0"
@@ -40,15 +40,15 @@ func (rdb *RedisInstance) GetNumTries(user dto.User) (string, error) {
 func (rdb *RedisInstance) SetNumTries(user dto.User, numTries int64, exp time.Duration) error {
 	val := strconv.FormatInt(numTries, 10)
 
-	return rdb.C.Set(rdb.CTX, user.UUID, val, exp).Err()
+	return rdb.c.Set(rdb.ctx, user.UUID, val, exp).Err()
 }
 
 func (rdb *RedisInstance) ComputeNextExp() time.Duration {
 	t1 := time.Now().UTC()
 	t2 := time.Now().UTC()
 	m := t1.Minute()
-	i := int(math.Floor(float64(m)/float64(rdb.WindowLengthInMinutes))) + 1
-	m = i*rdb.WindowLengthInMinutes - m
+	i := int(math.Floor(float64(m)/float64(rdb.windowLengthInMinutes))) + 1
+	m = i*rdb.windowLengthInMinutes - m
 	t1 = t1.Add(time.Duration(m) * time.Minute).Truncate(time.Minute)
 	t1 = t1.Add(1 * time.Millisecond) // to prevent zero value for exp
 	exp := t1.Sub(t2)
@@ -58,7 +58,7 @@ func (rdb *RedisInstance) ComputeNextExp() time.Duration {
 
 func (rdb *RedisInstance) PushPrize(user dto.User, prize []byte) error {
 	key := buildPrizeKey(user)
-	_, err := rdb.C.RPush(rdb.CTX, key, prize).Result()
+	_, err := rdb.c.RPush(rdb.ctx, key, prize).Result()
 
 	return err
 }
@@ -68,7 +68,7 @@ func (rdb *RedisInstance) RangePrizes(user dto.User, page int64) ([]string, erro
 	start := -NumPrizePerPage * (page + 1)
 	end := (-NumPrizePerPage * page) - 1
 
-	return rdb.C.LRange(rdb.CTX, key, start, end).Result()
+	return rdb.c.LRange(rdb.ctx, key, start, end).Result()
 }
 
 func buildPrizeKey(user dto.User) string {
@@ -101,8 +101,8 @@ func NewRedisInstance() *RedisInstance {
 	}
 
 	return &RedisInstance{
-		CTX:                   ctx,
-		C:                     c,
-		WindowLengthInMinutes: int(windowLengthInMinutes),
+		ctx:                   ctx,
+		c:                     c,
+		windowLengthInMinutes: int(windowLengthInMinutes),
 	}
 }
