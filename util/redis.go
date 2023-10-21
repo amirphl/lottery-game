@@ -89,9 +89,9 @@ func NewRedisInstance() *RedisInstance {
 	}
 
 	c := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", // TODO read from env
-		Password: "",               // no password set
-		DB:       0,                // use default DB
+		Addr:     "redis:6379", // TODO read from env
+		Password: "",           // no password set
+		DB:       0,            // use default DB
 	})
 
 	ctx := context.Background()

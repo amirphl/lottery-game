@@ -98,7 +98,6 @@ func (h *PrizeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	page := h.extractPage(params)
 
-	// TODO validate user, page
 	// TODO auth
 	strs, err := h.RDB.RangePrizes(user, page)
 	if err != nil {

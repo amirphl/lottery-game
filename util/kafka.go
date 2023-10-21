@@ -41,7 +41,9 @@ func (kaf *KafkaProducerInstance) Produce(user dto.User, resCH chan kafka.Event)
 			},
 			Key:   key,
 			Value: val,
-		}, resCH)
+		},
+		resCH,
+	)
 }
 
 func ReadConfig(configFile string) kafka.ConfigMap {
